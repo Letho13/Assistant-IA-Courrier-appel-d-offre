@@ -614,13 +614,11 @@ with st.sidebar:
             st.badge("Ollama non détecté", icon=":material/info:", color="orange")
             
     elif ai_provider == "Groq (Cloud)":
-        # 1. On essaie d'abord de récupérer la clé dans les secrets de Streamlit
-        if "GROQ_API_KEY" in st.secrets:
-            groq_api_key = st.secrets["GROQ_API_KEY"]
-            st.success("Clé API Groq chargée depuis les secrets.")
+        # Récupération sécurisée du secret sans espaces parasites
+        if "GROQ_API_KEY" in st.secrets and st.secrets["GROQ_API_KEY"]:
+            groq_api_key = str(st.secrets["GROQ_API_KEY"]).strip()
         else:
-            # 2. Si le secret n'existe pas, on affiche le champ de texte en solution de secours
-            groq_api_key = st.text_input("Clé API Groq (secours)", type="password")
+            groq_api_key = st.text_input("Clé API Groq", type="password").strip()
             
         groq_models = [
             "llama-3.1-8b-instant",
