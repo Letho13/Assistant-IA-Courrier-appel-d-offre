@@ -193,12 +193,10 @@ def parse_analysis_response(content):
 
     cleaned_content = content.strip()
     
-    # Utilisation de re.search pour ignorer le blabla avant ou après le JSON
     fenced_response = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned_content, re.IGNORECASE | re.DOTALL)
     if fenced_response:
         cleaned_content = fenced_response.group(1)
     else:
-        # Fallback de sécurité au cas où le LLM omet les balises markdown
         fallback_match = re.search(r"(\{.*\})", cleaned_content, re.DOTALL)
         if fallback_match:
             cleaned_content = fallback_match.group(1)
@@ -225,7 +223,6 @@ def parse_analysis_response(content):
         if not isinstance(item, dict):
             continue
 
-        # Mapping tolérant pour les clés JSON
         criterion = item.get("critere") or item.get("nom")
         statut = item.get("statut", "MANQUANT")
         valeur_trouvee = item.get("valeur_trouvee") or item.get("valeur", "Aucune")
@@ -311,7 +308,6 @@ def validate_analysis_against_courrier(analysis, courrier):
 
         if evidence:
             item["statut"] = "PRESENT"
-            # On n'écrase plus la valeur trouvée par le LLM, on ajoute juste une preuve en commentaire.
             if not reported_value_is_source_text:
                 item["commentaire"] = f"Valeur reformulée par l'IA. Confirmé en source par : '{evidence}'"
             else:
@@ -330,7 +326,6 @@ def validate_analysis_against_courrier(analysis, courrier):
                 item["valeur_trouvee"] = "Aucune"
                 item["commentaire"] = "Aucune mention correspondante dans le courrier fourni."
         elif item["statut"] == "PRESENT":
-            # Le LLM a trouvé quelque chose mais la RegEx ne l'a pas confirmé
             item["commentaire"] = "Présence détectée par l'IA (à vérifier manuellement)."
 
     analysis["statut_global"] = (
@@ -339,6 +334,60 @@ def validate_analysis_against_courrier(analysis, courrier):
         else "COMPLET"
     )
     return analysis
+
+
+def generate_missing_items_email(analysis, courrier_original, ai_provider, selected_model, groq_api_key, ollama_url):
+    """Génère un e-mail professionnel pour demander les éléments manquants au client."""
+    manquants = [item["critere"] for item in analysis.get("analyse_criteres", []) if item["statut"] == "MANQUANT"]
+    
+    if not manquants:
+        return "Le dossier est complet, aucun élément manquant à demander."
+
+    # Correction du SyntaxError : on sort le \n du f-string en créant la variable avant
+    liste_manquants_str = "\n- ".join(manquants)
+
+    prompt_relance = f"""
+    Tu es un assistant ADV expert en transport. Suite à la demande de cotation du client (basée sur le courrier original ci-dessous), 
+    le dossier est incomplet. 
+    
+    Rédige un e-mail professionnel, courtois mais précis, à destination du client pour lui demander de bien vouloir nous fournir les éléments manquants suivants :
+    - {liste_manquants_str}
+
+    Courrier original du client :
+    <courrier_client>
+    {courrier_original}
+    </courrier_client>
+
+    Rédige uniquement le corps de l'e-mail de relance en français, prêt à être envoyé.
+    """
+
+    messages = [
+        {"role": "system", "content": "Tu es un assistant ADV professionnel."},
+        {"role": "user", "content": prompt_relance}
+    ]
+
+    try:
+        if ai_provider == "Ollama (Local)":
+            response = requests.post(
+                f"{ollama_url}/api/chat",
+                json={"model": selected_model, "messages": messages, "stream": False},
+                timeout=60,
+            )
+            response.raise_for_status()
+            return response.json().get("message", {}).get("content", "Erreur de génération.")
+            
+        elif ai_provider == "Groq (Cloud)":
+            client = Groq(api_key=groq_api_key)
+            chat_completion = client.chat.completions.create(
+                messages=messages,
+                model=selected_model,
+                temperature=0.3,
+            )
+            return chat_completion.choices[0].message.content
+    except Exception as exc:
+        return f"Impossible de générer le courrier de relance : {exc}"
+    
+    return ""
 
 
 def build_analysis_messages(courrier):
@@ -605,7 +654,7 @@ st.markdown(
     """
     + "".join(workflow_cards)
     + "</ol>",
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 with st.sidebar:
@@ -650,7 +699,6 @@ with st.sidebar:
         else:
             groq_api_key = st.text_input("Clé API Groq", type="password").strip()
             
-        # Vos modèles spécifiques conservés :
         groq_models = [
             "qwen/qwen3.8-27b",
             "openai/gpt-oss-120b",
@@ -685,9 +733,6 @@ if run_live:
         messages = build_analysis_messages(courrier)
         content = None
         
-        # ----------------------------------------------------
-        # EXÉCUTION OLLAMA
-        # ----------------------------------------------------
         if ai_provider == "Ollama (Local)":
             if not ollama_url or not selected_model:
                 st.warning("Renseigne l'adresse du serveur Ollama et le nom du modèle.")
@@ -710,9 +755,6 @@ if run_live:
             except Exception as exc:
                 st.error(f"Erreur lors de l'appel à Ollama : {exc}")
                 
-        # ----------------------------------------------------
-        # EXÉCUTION GROQ
-        # ----------------------------------------------------
         elif ai_provider == "Groq (Cloud)":
             if not groq_api_key:
                 st.warning("Renseigne ta clé API Groq dans la barre latérale.")
@@ -730,9 +772,6 @@ if run_live:
             except GroqError as exc:
                 st.error(f"Erreur lors de l'appel à l'API Groq : {exc}")
 
-        # ----------------------------------------------------
-        # ANALYSE ET AFFICHAGE
-        # ----------------------------------------------------
         if content:
             try:
                 analysis = validate_analysis_against_courrier(
@@ -765,5 +804,19 @@ if run_live:
                         ["Critère", "Statut", "Valeur trouvée", "Commentaire"],
                         display_rows,
                     ),
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
+
+                if dossier_status == "INCOMPLET":
+                    st.markdown("#### Courrier de relance suggéré")
+                    st.caption("Le dossier comporte des éléments manquants. Tu peux générer un e-mail type pour les demander au client.")
+                    
+                    if st.button("Générer l'e-mail de demande de compléments"):
+                        with st.spinner("Rédaction du courrier par l'IA..."):
+                            email_content = generate_missing_items_email(
+                                analysis, courrier, ai_provider, selected_model, groq_api_key, ollama_url
+                            )
+                            st.session_state["email_relance"] = email_content
+                    
+                    if "email_relance" in st.session_state:
+                        st.text_area("E-mail prêt à être copié :", value=st.session_state["email_relance"], height=200)
