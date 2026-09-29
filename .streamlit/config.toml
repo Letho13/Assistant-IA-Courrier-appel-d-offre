@@ -1,0 +1,22 @@
+[theme]
+base = "dark"
+primaryColor = "#287a71"
+backgroundColor = "#1c2329"
+secondaryBackgroundColor = "#2d3942"
+textColor = "#e9eef0"
+font = "SF Pro Text, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+headingFont = "SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+greenColor = "#62d1a2"
+redColor = "#ff8188"
+blueColor = "#82b4db"
+grayColor = "#a1adb5"
+borderColor = "#46535e"
+baseRadius = "8px"
+showWidgetBorder = true
+linkUnderline = false
+
+[theme.sidebar]
+backgroundColor = "#202a31"
+secondaryBackgroundColor = "#303a43"
+textColor = "#e9eef0"
+borderColor = "#46535e"
