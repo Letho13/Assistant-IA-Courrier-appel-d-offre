@@ -4,6 +4,7 @@ import re
 
 import requests
 import streamlit as st
+from groq import Groq, GroqError
 
 TARIFF_CHECKS = (
     "Unité de tarif",
@@ -88,7 +89,7 @@ SOURCE_EVIDENCE_PATTERNS = {
         r"\barrivée\s+(?:à|a)\s+[^,.\n]+",
     ),
     "Fréquence et volume des expéditions": (
-        r"\b\d+\s*(?:à|a|-|à)\s*\d*\s*expéditions?\b[^.\n]*",
+        r"\b\d+\s*(?:à|a|-)\s*\d*\s*expéditions?\b[^.\n]*",
         r"\bexpéditions?\s+par\s+(?:jour|semaine|mois)\b[^.\n]*",
         r"\bfréquence\b[^.\n]*",
     ),
@@ -180,7 +181,7 @@ def parse_analysis_response(content):
     expected_keys = {"statut_global", "analyse_criteres"}
     if not isinstance(analysis, dict) or set(analysis) != expected_keys:
         raise ValueError(
-            "La réponse JSON ne contient pas exactement les trois champs attendus."
+            "La réponse JSON ne contient pas exactement les clés attendues."
         )
     if not isinstance(analysis["statut_global"], str) or analysis[
         "statut_global"
@@ -399,15 +400,15 @@ def render_control_table(headers, rows):
             background: #e8edf0; color: #27323a;
           }
           .control-table .status-cell { font-weight: 700; }
-                    .control-table .status-present {
+          .control-table .status-present {
             background: #d8f2e3; color: #174b34;
           }
-                    .control-table .status-missing {
+          .control-table .status-missing {
             background: #ffe8c2; color: #704400;
           }
-                    .control-table .status-not-applicable {
-                        background: #e3e8eb; color: #46535e;
-                    }
+          .control-table .status-not-applicable {
+            background: #e3e8eb; color: #46535e;
+          }
         </style>
         <div class="control-table-wrap"><table class="control-table">
           <thead><tr>
@@ -424,72 +425,58 @@ st.set_page_config(
     page_icon=":material/local_shipping:",
     layout="wide",
 )
+
 st.markdown(
     """
-        <style>
-            [data-testid="stMain"] h1#assistant-adv {
-                margin: 0 0 4px;
-                padding: 0;
-                border: 0;
-                border-radius: 0;
-                background: linear-gradient(180deg, #ffffff 0%, #a1a1aa 100%);
-                background-clip: text;
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                box-shadow: none;
-                font-size: 2.2rem;
-                font-weight: 800;
-                transition: none;
-            }
+    <style>
+        [data-testid="stMain"] h1#assistant-adv {
+            margin: 0 0 4px;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: linear-gradient(180deg, #ffffff 0%, #a1a1aa 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            box-shadow: none;
+            font-size: 2.2rem;
+            font-weight: 800;
+            transition: none;
+        }
 
-            [data-testid="stMain"] h3#reception-d-une-demande-de-cotation-transport {
-                margin: 0 0 8px;
-                padding: 0;
-                border: 0;
-                border-radius: 0;
-                background: none;
-                box-shadow: none;
-                color: #d4d4d8;
-                font-size: 1.15rem;
-                font-weight: 400;
-                line-height: 1.35;
-                transition: none;
-            }
+        [data-testid="stMain"] h3#reception-d-une-demande-de-cotation-transport {
+            margin: 0 0 8px;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: none;
+            box-shadow: none;
+            color: #d4d4d8;
+            font-size: 1.15rem;
+            font-weight: 400;
+            line-height: 1.35;
+            transition: none;
+        }
 
-            [data-testid="stMain"] h2,
-            [data-testid="stMain"] h3:not(#reception-d-une-demande-de-cotation-transport),
-            [data-testid="stMain"] h4 {
-                margin: 30px 0 16px;
-                padding: 0 0 8px 12px;
-                border: 0;
-                border-left: 3px solid #3b82f6;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 0;
-                background: transparent;
-                box-shadow: none;
-                color: #f0f4f8;
-                transition: border-color 0.3s ease, color 0.3s ease;
-            }
-
-            [data-testid="stMain"] h2:hover,
-            [data-testid="stMain"] h3:not(#reception-d-une-demande-de-cotation-transport):hover,
-            [data-testid="stMain"] h4:hover {
-                border-bottom-color: rgba(59, 130, 246, 0.45);
-                border-left-color: #60a5fa;
-                color: #ffffff;
-            }
-
-            @media (prefers-reduced-motion: reduce) {
-                [data-testid="stMain"] h2,
-                [data-testid="stMain"] h3,
-                [data-testid="stMain"] h4 {
-                    transition: none;
-                }
-            }
-        </style>
-        """,
+        [data-testid="stMain"] h2,
+        [data-testid="stMain"] h3:not(#reception-d-une-demande-de-cotation-transport),
+        [data-testid="stMain"] h4 {
+            margin: 30px 0 16px;
+            padding: 0 0 8px 12px;
+            border: 0;
+            border-left: 3px solid #3b82f6;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            color: #f0f4f8;
+            transition: border-color 0.3s ease, color 0.3s ease;
+        }
+    </style>
+    """,
     unsafe_allow_html=True,
 )
+
 st.title("ASSISTANT ADV")
 st.subheader("Réception d'une demande de cotation transport")
 st.write(
@@ -501,6 +488,7 @@ st.markdown("#### Parcours de la demande")
 st.caption(
     "Le suivi complet est présenté ; seule la réception est traitée dans cette version."
 )
+
 workflow_steps = (
     ("01", "Réception des éléments", "EN COURS", "green"),
     ("02", "Analyse juridique", "À VENIR", "red"),
@@ -511,6 +499,7 @@ workflow_steps = (
     ("07", "En attente de retour", "À VENIR", "red"),
     ("08", "Confirmé ou refusé", "À VENIR", "red"),
 )
+
 workflow_cards = []
 for number, title, status, color in workflow_steps:
     state = "active" if color == "green" else "pending"
@@ -521,225 +510,225 @@ for number, title, status, color in workflow_steps:
         f'<span class="workflow-step__status"><span class="workflow-step__dot" '
         f'aria-hidden="true"></span>{status}</span></li>'
     )
-st.html("""
-        <style>
-            .workflow-grid {
-                display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
-                gap: 12px;
-                margin: 0;
-                padding: 0;
-                list-style: none;
-            }
-            .workflow-step {
-                display: flex;
-                min-height: 132px;
-                flex-direction: column;
-                justify-content: space-between;
-                padding: 16px;
-                border: 1px solid #46555f;
-                border-radius: 8px;
-                background: #2d3942;
-                box-shadow: 0 2px 5px rgb(0 0 0 / 16%);
-                transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-            }
-            .workflow-step:hover {
-                transform: translateY(-4px);
-                border-color: #8aa9aa;
-                box-shadow: 0 12px 24px rgb(0 0 0 / 30%);
-            }
-            .workflow-step--active {
-                border-color: #4b9f89;
-                background: #293c3b;
-                box-shadow: inset 3px 0 #62d1a2, 0 4px 10px rgb(0 0 0 / 18%);
-            }
-            .workflow-step__number {
-                color: #aebac1;
-                font-size: 0.8rem;
-                font-weight: 700;
-            }
-            .workflow-step--active .workflow-step__number,
-            .workflow-step--active .workflow-step__status {
-                color: #75ddb4;
-            }
-            .workflow-step--pending .workflow-step__status {
-                color: #ff9a9f;
-            }
-            .workflow-step__title {
-                color: #f0f4f5;
-                font-size: 1rem;
-                line-height: 1.35;
-            }
-            .workflow-step__status {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                font-size: 0.75rem;
-                font-weight: 700;
-            }
-            .workflow-step__dot {
-                width: 8px;
-                height: 8px;
-                flex: 0 0 8px;
-                border-radius: 50%;
-                background: currentColor;
-                box-shadow: 0 0 10px currentColor;
-            }
-            @media (max-width: 850px) {
-                .workflow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            }
-            @media (max-width: 520px) {
-                .workflow-grid { grid-template-columns: 1fr; }
-                .workflow-step { min-height: 108px; }
-            }
-            @media (prefers-reduced-motion: reduce) {
-                .workflow-step { transition: none; }
-                .workflow-step:hover { transform: none; }
-            }
-        </style>
-        <ol class="workflow-grid" aria-label="Étapes du parcours de demande">
-        """ + "".join(workflow_cards) + "</ol>")
+
+st.html(
+    """
+    <style>
+        .workflow-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .workflow-step {
+            display: flex;
+            min-height: 132px;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px;
+            border: 1px solid #46555f;
+            border-radius: 8px;
+            background: #2d3942;
+            box-shadow: 0 2px 5px rgb(0 0 0 / 16%);
+        }
+        .workflow-step--active {
+            border-color: #4b9f89;
+            background: #293c3b;
+            box-shadow: inset 3px 0 #62d1a2, 0 4px 10px rgb(0 0 0 / 18%);
+        }
+        .workflow-step__number {
+            color: #aebac1;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .workflow-step--active .workflow-step__number,
+        .workflow-step--active .workflow-step__status {
+            color: #75ddb4;
+        }
+        .workflow-step--pending .workflow-step__status {
+            color: #ff9a9f;
+        }
+        .workflow-step__title {
+            color: #f0f4f5;
+            font-size: 1rem;
+            line-height: 1.35;
+        }
+        .workflow-step__status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .workflow-step__dot {
+            width: 8px;
+            height: 8px;
+            flex: 0 0 8px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 10px currentColor;
+        }
+    </style>
+    <ol class="workflow-grid" aria-label="Étapes du parcours de demande">
+    """
+    + "".join(workflow_cards)
+    + "</ol>"
+)
 
 with st.sidebar:
-    st.subheader("Configuration Ollama")
-    ollama_url = (
-        st.text_input(
-            "Adresse du serveur",
-            value="http://localhost:11434",
-            help="Adresse de l'API Ollama, sans slash final.",
+    st.subheader("Configuration de l'IA")
+    ai_provider = st.radio("Fournisseur", ["Ollama (Local)", "Groq (Cloud)"])
+    
+    selected_model = None
+    groq_api_key = None
+    ollama_url = None
+    
+    if ai_provider == "Ollama (Local)":
+        ollama_url = (
+            st.text_input(
+                "Adresse du serveur",
+                value="http://localhost:11434",
+                help="Adresse de l'API Ollama, sans slash final.",
+            )
+            .strip()
+            .rstrip("/")
         )
-        .strip()
-        .rstrip("/")
-    )
-    models = []
-    ollama_error = None
-    if ollama_url:
-        try:
-            models = get_ollama_models(ollama_url)
-        except requests.exceptions.ConnectionError:
-            ollama_error = "Ollama ne répond pas à cette adresse."
-        except requests.exceptions.Timeout:
-            ollama_error = "Ollama n'a pas répondu à temps."
-        except requests.exceptions.HTTPError as exc:
-            ollama_error = f"Ollama a refusé la vérification : {exc}"
-        except requests.exceptions.RequestException as exc:
-            ollama_error = f"Erreur lors de la vérification d'Ollama : {exc}"
-        except (ValueError, requests.exceptions.JSONDecodeError) as exc:
-            ollama_error = f"Réponse Ollama invalide : {exc}"
+        models = []
+        ollama_error = None
+        if ollama_url:
+            try:
+                models = get_ollama_models(ollama_url)
+            except requests.exceptions.RequestException as exc:
+                ollama_error = f"Erreur de connexion : {exc}"
+            except ValueError as exc:
+                ollama_error = f"Réponse invalide : {exc}"
 
-    if models:
-        model = st.selectbox("Modèle installé", options=models)
-        st.badge("IA locale disponible", icon=":material/check_circle:", color="green")
-    else:
-        model = ""
-        if ollama_error:
-            st.caption(ollama_error)
+        if models:
+            selected_model = st.selectbox("Modèle installé", options=models)
+            st.badge("IA locale prête", icon=":material/check_circle:", color="green")
         else:
-            st.badge(
-                "Mode démo sans IA disponible", icon=":material/info:", color="orange"
-            )
-            st.caption(
-                "La génération est désactivée sans Ollama. Démarre Ollama et installe un modèle "
-                "pour analyser le courrier."
-            )
-            st.code("ollama pull llama3.2", language="powershell")
+            if ollama_error:
+                st.caption(ollama_error)
+            st.badge("Ollama non détecté", icon=":material/info:", color="orange")
+            
+    elif ai_provider == "Groq (Cloud)":
+        groq_api_key = st.text_input("Clé API Groq", type="password")
+        groq_models = [
+            "llama-3.1-70b-versatile",
+            "llama-3.1-8b-instant",
+            "mixtral-8x7b-32768",
+            "gemma2-9b-it"
+        ]
+        selected_model = st.selectbox("Modèle Groq", options=groq_models)
+        
+        if groq_api_key:
+            st.badge("Clé Groq renseignée", icon=":material/check_circle:", color="green")
+        else:
+            st.badge("Clé requise", icon=":material/key:", color="orange")
+
 
 courrier = st.text_area(
     "Courrier du client",
     value="",
     height=220,
     placeholder="Colle ici le courrier reçu du client…",
-    help=(
-        "Si le texte provient d'un document paginé, conserve ses repères de page "
-        "(par exemple « Page 2 ») pour faciliter la vérification des sources."
-    ),
 )
 
 st.subheader("Générer l'analyse")
 run_live = st.button(
-    "Générer l'analyse avec l'IA locale",
+    "Générer l'analyse",
     type="primary",
-    disabled=not models,
+    disabled=not selected_model and (ai_provider == "Ollama (Local)"),
     icon=":material/auto_awesome:",
 )
 
 if run_live:
     if not courrier.strip():
         st.warning("Ajoute le courrier du client avant de lancer l'analyse.")
-    elif not ollama_url or not model:
-        st.warning("Renseigne l'adresse du serveur Ollama et le nom du modèle.")
     else:
         messages = build_analysis_messages(courrier)
-        try:
-            response = requests.post(
-                f"{ollama_url}/api/chat",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "format": CONTROL_RESPONSE_SCHEMA,
-                    "stream": False,
-                },
-                timeout=180,
-            )
-            response.raise_for_status()
-        except requests.exceptions.ConnectionError:
-            st.error(
-                "Impossible de joindre Ollama. Vérifie qu'Ollama est installé et démarré "
-                "sur cette adresse."
-            )
-        except requests.exceptions.Timeout:
-            st.error(
-                "Ollama n'a pas répondu à temps. Réessaie ou choisis un modèle plus léger."
-            )
-        except requests.exceptions.HTTPError as exc:
-            st.error(f"Ollama a refusé la requête : {exc}")
-            if exc.response is not None and exc.response.text.strip():
-                st.caption(f"Détail Ollama : {exc.response.text.strip()}")
-        except requests.exceptions.RequestException as exc:
-            st.error(f"Erreur lors de l'appel à Ollama : {exc}")
-        else:
+        content = None
+        
+        # ----------------------------------------------------
+        # EXÉCUTION OLLAMA
+        # ----------------------------------------------------
+        if ai_provider == "Ollama (Local)":
+            if not ollama_url or not selected_model:
+                st.warning("Renseigne l'adresse du serveur Ollama et le nom du modèle.")
+                st.stop()
+                
             try:
+                response = requests.post(
+                    f"{ollama_url}/api/chat",
+                    json={
+                        "model": selected_model,
+                        "messages": messages,
+                        "format": CONTROL_RESPONSE_SCHEMA,
+                        "stream": False,
+                    },
+                    timeout=180,
+                )
+                response.raise_for_status()
                 result = response.json()
-            except requests.exceptions.JSONDecodeError:
-                st.error("Ollama a renvoyé une réponse illisible.")
+                content = result.get("message", {}).get("content")
+            except Exception as exc:
+                st.error(f"Erreur lors de l'appel à Ollama : {exc}")
+                
+        # ----------------------------------------------------
+        # EXÉCUTION GROQ
+        # ----------------------------------------------------
+        elif ai_provider == "Groq (Cloud)":
+            if not groq_api_key:
+                st.warning("Renseigne ta clé API Groq dans la barre latérale.")
+                st.stop()
+                
+            try:
+                client = Groq(api_key=groq_api_key)
+                chat_completion = client.chat.completions.create(
+                    messages=messages,
+                    model=selected_model,
+                    temperature=0.0,
+                    response_format={"type": "json_object"},
+                )
+                content = chat_completion.choices[0].message.content
+            except GroqError as exc:
+                st.error(f"Erreur lors de l'appel à l'API Groq : {exc}")
+
+        # ----------------------------------------------------
+        # ANALYSE ET AFFICHAGE
+        # ----------------------------------------------------
+        if content:
+            try:
+                analysis = validate_analysis_against_courrier(
+                    parse_analysis_response(content), courrier
+                )
+            except (json.JSONDecodeError, ValueError) as exc:
+                st.error(f"Réponse JSON invalide ({ai_provider}) : {exc}")
+                st.code(content)
             else:
-                if not isinstance(result, dict):
-                    st.error("La réponse d'Ollama doit être un objet JSON.")
-                    st.stop()
-                message = result.get("message")
-                content = message.get("content") if isinstance(message, dict) else None
-                if not isinstance(content, str) or not content.strip():
-                    st.error("La réponse d'Ollama ne contient aucun texte exploitable.")
-                else:
-                    try:
-                        analysis = validate_analysis_against_courrier(
-                            parse_analysis_response(content), courrier
-                        )
-                    except (json.JSONDecodeError, ValueError) as exc:
-                        st.error(f"Réponse JSON Ollama invalide : {exc}")
-                        st.code(content)
-                    else:
-                        criteria = analysis["analyse_criteres"]
-                        display_rows = [
-                            [
-                                item["critere"],
-                                item["statut"],
-                                item["valeur_trouvee"],
-                                item["commentaire"],
-                            ]
-                            for item in criteria
-                        ]
-                        dossier_status = analysis["statut_global"]
-                        st.subheader("Grille de contrôle — synthèse")
-                        st.badge(
-                            f"Dossier {dossier_status}",
-                            color=(
-                                "green" if dossier_status == "COMPLET" else "orange"
-                            ),
-                        )
-                        st.html(
-                            render_control_table(
-                                ["Critère", "Statut", "Valeur trouvée", "Commentaire"],
-                                display_rows,
-                            )
-                        )
+                criteria = analysis["analyse_criteres"]
+                display_rows = [
+                    [
+                        item["critere"],
+                        item["statut"],
+                        item["valeur_trouvee"],
+                        item["commentaire"],
+                    ]
+                    for item in criteria
+                ]
+                dossier_status = analysis["statut_global"]
+                st.subheader("Grille de contrôle — synthèse")
+                st.badge(
+                    f"Dossier {dossier_status}",
+                    color=(
+                        "green" if dossier_status == "COMPLET" else "orange"
+                    ),
+                )
+                st.html(
+                    render_control_table(
+                        ["Critère", "Statut", "Valeur trouvée", "Commentaire"],
+                        display_rows,
+                    )
+                )
